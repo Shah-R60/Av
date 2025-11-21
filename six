@@ -1,0 +1,261 @@
+#include <iostream>
+#include <vector>
+#include <string>
+#include <set>
+#include <map>
+#include <sstream>
+#include <algorithm>
+
+using namespace std;
+
+map<char, vector<string>> grammar;
+map<char, set<char>> firstSets;
+map<char, set<char>> followSets;
+map<pair<char, char>, string> parseTable;
+set<char> nonTerminals;
+set<char> terminals;
+char startSymbol = ' ';
+
+set<char> calculateFirstForString(const string &s)
+{
+  set<char> result;
+  bool continueToNext = true;
+
+  for (char ch : s)
+  {
+    if (!continueToNext)
+      break;
+    continueToNext = false;
+
+    if (islower(ch) || !isalpha(ch))
+    {
+      result.insert(ch);
+      break;
+    }
+
+    for (char first_char : firstSets[ch])
+    {
+      if (first_char == '#')
+      {
+        continueToNext = true;
+      }
+      else
+      {
+        result.insert(first_char);
+      }
+    }
+  }
+
+  if (continueToNext)
+  {
+    result.insert('#');
+  }
+  return result;
+}
+
+void computeFirstSets()
+{
+  bool changed = true;
+  while (changed)
+  {
+    changed = false;
+    for (auto const &pair : grammar)
+    {
+      char nt = pair.first;
+      const vector<string> &productions = pair.second;
+
+      int original_size = firstSets[nt].size();
+      for (const string &prod : productions)
+      {
+        set<char> tempFirst = calculateFirstForString(prod);
+        for (char c : tempFirst)
+        {
+          firstSets[nt].insert(c);
+        }
+      }
+      if (firstSets[nt].size() != original_size)
+      {
+        changed = true;
+      }
+    }
+  }
+}
+
+void computeFollowSets()
+{
+  if (startSymbol != ' ')
+  {
+    followSets[startSymbol].insert('$');
+  }
+
+  bool changed = true;
+  while (changed)
+  {
+    changed = false;
+
+    for (auto const &pair : grammar)
+    {
+      char nt = pair.first;
+      const vector<string> &productions = pair.second;
+
+      for (const string &prod : productions)
+      {
+        for (int i = 0; i < prod.length(); ++i)
+        {
+          char currentSymbol = prod[i];
+          if (isupper(currentSymbol))
+          {
+            string beta = prod.substr(i + 1);
+            int original_size = followSets[currentSymbol].size();
+
+            if (beta.empty())
+            {
+              for (char c : followSets[nt])
+              {
+                followSets[currentSymbol].insert(c);
+              }
+            }
+            else
+            {
+              set<char> firstOfBeta = calculateFirstForString(beta);
+              bool hasEpsilon = false;
+              for (char c : firstOfBeta)
+              {
+                if (c != '#')
+                {
+                  followSets[currentSymbol].insert(c);
+                }
+                else
+                {
+                  hasEpsilon = true;
+                }
+              }
+              if (hasEpsilon)
+              {
+                for (char c : followSets[nt])
+                {
+                  followSets[currentSymbol].insert(c);
+                }
+              }
+            }
+            if (followSets[currentSymbol].size() != original_size)
+            {
+              changed = true;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+void createParseTable()
+{
+  for (auto const &pair : grammar)
+  {
+    char nt = pair.first;
+    const vector<string> &productions = pair.second;
+
+    for (const string &prod : productions)
+    {
+      set<char> firstOfProd = calculateFirstForString(prod);
+
+      for (char terminal : firstOfProd)
+      {
+        if (terminal != '#')
+        {
+          string rule = string(1, nt) + "->" + prod;
+          parseTable[{nt, terminal}] = rule;
+        }
+      }
+
+      if (firstOfProd.count('#'))
+      {
+        for (char terminal : followSets[nt])
+        {
+          string rule = string(1, nt) + "->#";
+          parseTable[{nt, terminal}] = rule;
+        }
+      }
+    }
+  }
+}
+
+int main()
+{
+  int n;
+  cout << "Enter the no. of productions: ";
+  cin >> n;
+  cin.ignore();
+
+  cout << "Enter the productions in a grammar (e.g., S->CC, C->eC|d):" << endl;
+  cout << "Use '#' for epsilon." << endl;
+
+  for (int i = 0; i < n; ++i)
+  {
+    string prod;
+    getline(cin, prod);
+
+    char nonTerminal = prod[0];
+    if (i == 0)
+      startSymbol = nonTerminal;
+
+    nonTerminals.insert(nonTerminal);
+
+    string rhs = prod.substr(3);
+    stringstream ss(rhs);
+    string segment;
+
+    while (getline(ss, segment, '|'))
+    {
+      grammar[nonTerminal].push_back(segment);
+      for (char c : segment)
+      {
+        if (!isupper(c) && c != '#')
+        {
+          terminals.insert(c);
+        }
+      }
+    }
+  }
+
+  computeFirstSets();
+  computeFollowSets();
+
+  cout << "\nFirst" << endl;
+  for (char nt : nonTerminals)
+  {
+    cout << "FIRS[" << nt << "] = ";
+    for (char c : firstSets[nt])
+    {
+      cout << c;
+    }
+    cout << endl;
+  }
+
+  cout << "\nFollow" << endl;
+  for (char nt : nonTerminals)
+  {
+    cout << "FOLLOW[" << nt << "] = ";
+    for (char c : followSets[nt])
+    {
+      cout << c;
+    }
+    cout << endl;
+  }
+
+  createParseTable();
+  cout << endl;
+
+  for (auto const &entry : parseTable)
+  {
+    const auto &key = entry.first;
+    const auto &val = entry.second;
+    cout << "M[" << key.first << ", " << key.second << "] = " << val << endl;
+  }
+
+  cout << "\nResult:-" << endl;
+  cout << "The program was successfully compiled and run." << endl;
+
+  return 0;
+}
