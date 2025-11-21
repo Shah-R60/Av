@@ -1,0 +1,226 @@
+#include <iostream>
+#include <vector>
+#include <string>
+#include <map>
+#include <set>
+#include <algorithm>
+
+using namespace std;
+
+// Use a map to store the grammar rules. The key is the non-terminal (char),
+// and the value is a vector of strings representing its productions.
+map<char, vector<string>> productions;
+
+// Maps to store the computed FIRST and FOLLOW sets for each non-terminal.
+// A set is used to automatically handle duplicates and keep elements sorted.
+map<char, set<char>> firstSets;
+map<char, set<char>> followSets;
+
+// A vector to maintain the order of non-terminals as they appear in the input.
+vector<char> nonTerminals;
+
+// The start symbol of the grammar.
+char startSymbol;
+
+// Function to calculate the FIRST sets for all non-terminals.
+// It iteratively applies the rules for FIRST sets until no new symbols can be added.
+void calculateFirstSets()
+{
+  bool changed;
+  do
+  {
+    changed = false;
+    // Iterate over each non-terminal in the order they were added.
+    for (char nt : nonTerminals)
+    {
+      // For each production rule of the current non-terminal.
+      for (const string &rule : productions[nt])
+      {
+        int originalSize = firstSets[nt].size();
+
+        // If the rule is epsilon production (e.g., A -> ε).
+        if (rule[0] == 'e')
+        {
+          firstSets[nt].insert('e');
+        }
+        // If the first symbol in the rule is a terminal.
+        else if (!isupper(rule[0]))
+        {
+          firstSets[nt].insert(rule[0]);
+        }
+        // If the first symbol is a non-terminal.
+        else
+        {
+          bool allHaveEpsilon = true;
+          // Iterate through symbols of the rule to handle productions like A -> BCD.
+          for (char symbol : rule)
+          {
+            if (isupper(symbol))
+            {
+              // Add FIRST(symbol) - {ε} to FIRST(nt).
+              for (char first : firstSets[symbol])
+              {
+                if (first != 'e')
+                {
+                  firstSets[nt].insert(first);
+                }
+              }
+              // If FIRST(symbol) does not contain epsilon, stop.
+              if (firstSets[symbol].find('e') == firstSets[symbol].end())
+              {
+                allHaveEpsilon = false;
+                break;
+              }
+            }
+            else
+            { // Terminal encountered
+              firstSets[nt].insert(symbol);
+              allHaveEpsilon = false;
+              break;
+            }
+          }
+          // If all symbols in the rule can derive epsilon, add epsilon to FIRST(nt).
+          if (allHaveEpsilon)
+          {
+            firstSets[nt].insert('e');
+          }
+        }
+
+        // Check if the FIRST set was modified in this iteration.
+        if (firstSets[nt].size() > originalSize)
+        {
+          changed = true;
+        }
+      }
+    }
+  } while (changed);
+}
+
+// Function to calculate the FOLLOW sets for all non-terminals.
+// It iteratively applies the rules for FOLLOW sets until no new symbols can be added.
+void calculateFollowSets()
+{
+  // Rule 1: Place '$' in FOLLOW(S), where S is the start symbol.
+  followSets[startSymbol].insert('$');
+
+  bool changed;
+  do
+  {
+    changed = false;
+    // Iterate over each non-terminal A.
+    for (char A : nonTerminals)
+    {
+      // For each production rule of A.
+      for (const string &rule : productions[A])
+      {
+        // Iterate through the symbols in the rule.
+        for (int i = 0; i < rule.length(); ++i)
+        {
+          char B = rule[i];
+          // Find a non-terminal B in the rule.
+          if (isupper(B))
+          {
+            int originalSize = followSets[B].size();
+            bool epsilonInBeta = true;
+
+            // Rule 2: For a production A -> αBβ, everything in FIRST(β) except ε is in FOLLOW(B).
+            for (int j = i + 1; j < rule.length(); ++j)
+            {
+              char beta_first_symbol = rule[j];
+              epsilonInBeta = false;
+
+              if (!isupper(beta_first_symbol))
+              { // β starts with a terminal
+                followSets[B].insert(beta_first_symbol);
+                break;
+              }
+
+              // β starts with a non-terminal
+              set<char> &firstOfBeta = firstSets[beta_first_symbol];
+              for (char f : firstOfBeta)
+              {
+                if (f != 'e')
+                {
+                  followSets[B].insert(f);
+                }
+              }
+
+              if (firstOfBeta.find('e') == firstOfBeta.end())
+              {
+                break;
+              }
+              else if (j == rule.length() - 1)
+              { // Reached end of rule
+                epsilonInBeta = true;
+              }
+            }
+
+            // Rule 3: For A -> αB or A -> αBβ where FIRST(β) contains ε,
+            // everything in FOLLOW(A) is in FOLLOW(B).
+            if (epsilonInBeta)
+            {
+              for (char f : followSets[A])
+              {
+                followSets[B].insert(f);
+              }
+            }
+
+            // Check if the FOLLOW set was modified.
+            if (followSets[B].size() > originalSize)
+            {
+              changed = true;
+            }
+          }
+        }
+      }
+    }
+  } while (changed);
+}
+
+// Main function to drive the program.
+int main()
+{
+  // --- Hardcoded Test Case ---
+
+  // Define the order of non-terminals for consistent output.
+  nonTerminals = {'E', 'A', 'T', 'B', 'F'};
+
+  // Set the start symbol.
+  startSymbol = 'E';
+
+  // Define the grammar productions.
+  productions['E'] = {"TA"};
+  productions['A'] = {"+TA", "e"};
+  productions['T'] = {"FB"};
+  productions['B'] = {"*FB", "e"};
+  productions['F'] = {"(E)", "i"};
+
+  // --- End of Hardcoded Test Case ---
+
+  // Calculate the FIRST and FOLLOW sets.
+  calculateFirstSets();
+  calculateFollowSets();
+
+  // Display the results.
+  cout << "FIRST and FOLLOW sets for the hardcoded grammar:" << endl;
+  for (char nt : nonTerminals)
+  {
+    cout << nt << "\t(";
+    for (char c : firstSets[nt])
+    {
+      // Use ε for display instead of 'e'.
+      if (c == 'e')
+        cout << "e";
+      else
+        cout << c;
+    }
+    cout << ")\t(";
+    for (char c : followSets[nt])
+    {
+      cout << c;
+    }
+    cout << ")" << endl;
+  }
+
+  return 0;
+}
