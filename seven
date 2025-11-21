@@ -1,0 +1,112 @@
+#include <iostream>
+#include <vector>
+#include <string>
+#include <algorithm>
+
+// A structure to hold grammar productions
+struct Production
+{
+  char lhs;
+  std::string rhs;
+};
+
+// Function to print the current state of the parser
+void print_state(const std::string &stack, const std::string &input, const std::string &action)
+{
+  std::cout << "$" << stack << "\t\t" << input << "$\t\t" << action << std::endl;
+}
+
+// The main function to perform shift-reduce parsing
+void shift_reduce_parse(const std::vector<Production> &grammar, char start_symbol, std::string input_string)
+{
+  std::string stack;
+  int input_ptr = 0;
+
+  std::cout << "\nStack\t\tInput Buffer\t\tAction" << std::endl;
+  std::cout << "-----\t\t------------\t\t------" << std::endl;
+  print_state(stack, input_string.substr(input_ptr), "Initial State");
+
+  while (true)
+  {
+    // --- Reduce Step ---
+    bool reduction_made = false;
+    // Iterate through grammar rules to find a possible reduction
+    for (const auto &prod : grammar)
+    {
+      // Check if the top of the stack matches the RHS of the production
+      if (stack.length() >= prod.rhs.length() &&
+          stack.substr(stack.length() - prod.rhs.length()) == prod.rhs)
+      {
+
+        // Perform the reduction
+        stack.resize(stack.length() - prod.rhs.length());
+        stack.push_back(prod.lhs);
+
+        std::string action = "Reduce by " + std::string(1, prod.lhs) + " -> " + prod.rhs;
+        print_state(stack, input_string.substr(input_ptr), action);
+
+        reduction_made = true;
+        break; // Restart scan for another reduction
+      }
+    }
+
+    if (reduction_made)
+    {
+      // If we made a reduction, check for acceptance before shifting
+      if (stack.length() == 1 && stack[0] == start_symbol && input_ptr == input_string.length())
+      {
+        std::cout << "\nResult: Accepted" << std::endl;
+        return;
+      }
+      continue; // Go back to check for more reductions
+    }
+
+    // --- Shift Step ---
+    // If no reduction was possible and there's still input, shift
+    if (input_ptr < input_string.length())
+    {
+      stack.push_back(input_string[input_ptr]);
+      input_ptr++;
+      std::string action = "Shift " + std::string(1, stack.back());
+      print_state(stack, input_string.substr(input_ptr), action);
+    }
+    else
+    {
+      // No more input and no more possible reductions
+      // Check for final acceptance state one last time
+      if (stack.length() == 1 && stack[0] == start_symbol)
+      {
+        std::cout << "\nResult: Accepted" << std::endl;
+      }
+      else
+      {
+        std::cout << "\nResult: Not Accepted" << std::endl;
+      }
+      return;
+    }
+  }
+}
+
+int main()
+{
+  // Define the grammar based on the user input
+  std::vector<Production> grammar = {
+      {'E', "E+E"},
+      {'E', "E*E"},
+      {'E', "i"}};
+  char start_symbol = 'E';
+
+  std::cout << "Grammar:" << std::endl;
+  for (const auto &prod : grammar)
+  {
+    std::cout << prod.lhs << " -> " << prod.rhs << std::endl;
+  }
+
+  std::string input_string;
+  std::cout << "\nEnter the input string: ";
+  std::cin >> input_string;
+
+  shift_reduce_parse(grammar, start_symbol, input_string);
+
+  return 0;
+}
